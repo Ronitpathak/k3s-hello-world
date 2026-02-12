@@ -1,0 +1,58 @@
+---
+- name: Install k3s on Linux
+  hosts: k3s
+  become: yes
+  tasks:
+    - name: Update apt cache
+      apt:
+        update_cache: yes
+
+    - name: Install required dependencies
+      package:
+        name:
+          - curl
+          - wget
+        state: present
+
+    - name: Download k3s installation script
+      get_url:
+        url: https://get.k3s.io
+        dest: /tmp/k3s-install.sh
+        mode: '0755'
+
+    - name: Install k3s
+      shell: /tmp/k3s-install.sh
+      environment:
+        INSTALL_K3S_CHANNEL: stable
+
+    - name: Wait for k3s to be ready
+      wait_for:
+        path: /etc/rancher/k3s/k3s.yaml
+        timeout: 60
+
+    - name: Create .kube directory
+      file:
+        path: /root/.kube
+        state: directory
+        mode: '0755'
+
+    - name: Copy kubeconfig
+      copy:
+        src: /etc/rancher/k3s/k3s.yaml
+        dest: /root/.kube/config
+        remote_src: yes
+        mode: '0600'
+
+    - name: Fetch kubeconfig to local machine
+      fetch:
+        src: /etc/rancher/k3s/k3s.yaml
+        dest: ./kubeconfig
+        flat: yes
+
+    - name: Verify k3s installation
+      command: kubectl get nodes
+      register: nodes_output
+
+    - name: Display cluster status
+      debug:
+        msg: "{{ nodes_output.stdout_lines }}"
