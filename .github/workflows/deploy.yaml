@@ -1,4 +1,4 @@
-name: Deploy to k3s
+name: CI/CD - Deploy Nginx to k3s
 
 on:
   push:
@@ -8,21 +8,40 @@ on:
 
 jobs:
   deploy:
+    name: Build & Deploy to k3s
     runs-on: self-hosted
 
     steps:
-      - name: Checkout code
+      - name: Checkout Repository
         uses: actions/checkout@v3
+
+      - name: Setup kubectl
+        uses: azure/setup-kubectl@v3
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+          version: 'latest'
 
-      - name: Set kubeconfig
+      - name: Configure kubeconfig
         run: |
-          sudo chmod 644 /etc/rancher/k3s/k3s.yaml
-          export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
-          kubectl get nodes
+          echo "${{ secrets.KUBECONFIG_DATA }}" | base64 -d > kubeconfig
+          chmod 600 kubeconfig
+        env:
+          KUBECONFIG: ${{ github.workspace }}/kubeconfig
 
-      - name: Deploy
+      - name: Verify Cluster Access
+        run: kubectl get nodes
+        env:
+          KUBECONFIG: ${{ github.workspace }}/kubeconfig
+
+      - name: Deploy Nginx Application
         run: |
-          export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
           kubectl apply -f ansible/k8s/deployment.yaml
+          kubectl rollout status deployment/nginx-hello-world --timeout=120s
+        env:
+          KUBECONFIG: ${{ github.workspace }}/kubeconfig
+
+      - name: Verify Deployment
+        run: |
+          kubectl get pods
+          kubectl get svc
+        env:
+          KUBECONFIG: ${{ github.workspace }}/kubeconfig
